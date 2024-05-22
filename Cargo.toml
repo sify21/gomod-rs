@@ -1,0 +1,15 @@
+[package]
+name = "gomod-rs"
+version = "0.1.0"
+edition = "2021"
+
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/sify21/gomod-rs"
+description = "A library to parse go.mod."
+categories = ["parser-implementations"]
+keywords = ["gomod", "golang", "go.mod"]
+
+[dependencies]
+nom = "7"
+nom_locate = "4"
