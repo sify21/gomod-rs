@@ -96,7 +96,9 @@ pub struct Context<'a, T: 'a> {
 
 pub type GoMod<'a> = Vec<Context<'a, Directive<'a>>>;
 
-pub fn parse_gomod(text: &str) -> Result<GoMod, Err<Error<Span>>> {
-    let (_, ret) = parser::parse_gomod(Span::new(text))?;
+/// Return an error indicating (line, offset)
+pub fn parse_gomod(text: &str) -> Result<GoMod, Err<Error<(u32, usize)>>> {
+    let (_, ret) = parser::parse_gomod(Span::new(text))
+        .map_err(|e| e.map_input(|i| (i.location_line(), i.location_offset())))?;
     Ok(ret)
 }
