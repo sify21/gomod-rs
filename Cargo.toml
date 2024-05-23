@@ -8,7 +8,7 @@ readme = "README.md"
 repository = "https://github.com/sify21/gomod-rs"
 description = "A go.mod parser with locations."
 categories = ["parser-implementations"]
-keywords = ["gomod", "golang", "go.mod"]
+keywords = ["gomod", "golang", "gomod-parser"]
 
 [dependencies]
 nom = "7"
