@@ -6,7 +6,7 @@ edition = "2021"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/sify21/gomod-rs"
-description = "A library to parse go.mod."
+description = "A go.mod parser with locations."
 categories = ["parser-implementations"]
 keywords = ["gomod", "golang", "go.mod"]
 

@@ -36,3 +36,4 @@ gomod
         });
     });
 ```
+Also see `example/parse.rs`.
