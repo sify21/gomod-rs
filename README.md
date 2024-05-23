@@ -12,8 +12,18 @@ Here is an example printing all requirements defined in a go.mod file, along wit
 ```rust
 use gomod_rs::{parse_gomod, Context, Directive};
 
-let contents = r#"
-"#;
+let contents = r#"module example.com/my/thing
+
+go 1.12
+
+require (
+    example.com/other/thing v1.0.2
+    example.com/new/thing/v2 v2.3.4
+)
+
+exclude example.com/old/thing v1.2.3
+replace example.com/bad/thing v1.4.5 => example.com/good/thing v1.4.5
+retract [v1.9.0, v1.9.5]"#;
 let gomod = parse_gomod(&contents)?;
 gomod
     .iter()
@@ -36,4 +46,10 @@ gomod
         });
     });
 ```
-Also see `example/parse.rs`.
+Above will ouput:
+```
+Requirement {name: example.com/other/thing, version: v1.0.2} at line 6, fragment: example.com/other/thing v1.0.2
+
+Requirement {name: example.com/new/thing/v2, version: v2.3.4} at line 7, fragment: example.com/new/thing/v2 v2.3.4
+```
+You can also `cargo run --example parse -- /path/to/go.mod`.

@@ -16,7 +16,7 @@ fn main() {
         .for_each(|require_specs| {
             require_specs.iter().for_each(|spec| {
                 println!(
-                    "Defined a dependency {{name: {}, version: {}}} at line {}, fragment: {}",
+                    "Requirement {{name: {}, version: {}}} at line {}, fragment: {}",
                     spec.value.0,
                     &spec.value.1 as &str,
                     spec.range.0.line,
