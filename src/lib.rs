@@ -10,6 +10,7 @@ pub type Span<'a> = LocatedSpan<&'a str>;
 pub enum Sundry<'a> {
     Comment(Span<'a>),
     Empty(Span<'a>),
+    EOF,
 }
 
 #[derive(Debug, PartialEq, Eq)]

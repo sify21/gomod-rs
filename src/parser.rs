@@ -3,7 +3,7 @@ use crate::{Span, Sundry};
 use super::GoMod;
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_a, is_not, tag, take, take_till, take_while, take_while1},
+    bytes::complete::{escaped, is_a, is_not, tag, take, take_while, take_while1},
     character::{
         complete::{char, one_of},
         is_alphanumeric,
@@ -43,38 +43,27 @@ where
     ))
 }
 
-fn parse_empty_line(input: Span) -> IResult<Span, Sundry> {
-    terminated(delims0, char('\n'))
-        .map(|i| Sundry::Empty(i))
-        .parse(input)
-}
 // include trailing newline or eof
 fn parse_inline_comment(input: Span) -> IResult<Span, Sundry> {
-    terminated(
-        alt((
-            preceded(pair(delims0, tag("//")), take_while(|c| c != '\n'))
-                .map(|i| Sundry::Comment(i)),
-            delims0.map(|i| Sundry::Empty(i)),
-        )),
-        alt((tag("\n"), eof)),
-    )
-    .parse(input)
-}
-// with leading spaces and trailing newline
-fn parse_oneline_comment(input: Span) -> IResult<Span, Sundry> {
-    delimited(
-        preceded(delims0, tag("//")),
-        take_till(|c| c == '\n'),
-        char('\n'),
-    )
-    .map(|comment| Sundry::Comment(comment))
-    .parse(input)
+    alt((
+        delimited(
+            pair(delims0, tag("//")),
+            take_while(|c| c != '\n'),
+            char('\n'),
+        )
+        .map(|i| Sundry::Comment(i)),
+        terminated(delims0, char('\n')).map(|i| Sundry::Empty(i)),
+        delimited(pair(delims0, tag("//")), take_while(|c| c != '\n'), eof)
+            .map(|i| Sundry::Comment(i)),
+        terminated(delims1, eof).map(|i| Sundry::Empty(i)),
+        eof.map(|_| Sundry::EOF),
+    ))(input)
 }
 fn parse_multiline_comments(input: Span) -> IResult<Span, Vec<Sundry>> {
     fold_many0(
-        alt((parse_empty_line, parse_oneline_comment)),
+        verify(parse_inline_comment, |i| !matches!(i, &Sundry::EOF)),
         Vec::new,
-        |mut acc: Vec<_>, item| {
+        |mut acc, item| {
             acc.push(item);
             acc
         },
@@ -138,23 +127,39 @@ pub fn parse_gomod(input: Span) -> IResult<Span, GoMod> {
             acc
         },
     )(input)?;
-    let (input, _) = pair(parse_multiline_comments, eof)(input)?;
+    let (input, _) = parse_multiline_comments(input)?;
     Ok((input, ret))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Span, Sundry};
+    use crate::{
+        parse_gomod, Context, Directive, Location, ReplaceSpec, Replacement, RetractSpec, Span,
+        Sundry,
+    };
 
     use super::{parse_identifier, parse_inline_comment};
 
     #[test]
     fn test_inline_comment() {
-        for s in ["// sdfsfs\n", "// sdfsfs"] {
+        for s in ["// sdfsfs\n", "// sdfsfs", "  // sdfsfs\n", "  // sdfsfs"] {
             let (input, ret) = parse_inline_comment(Span::new(s)).unwrap();
             assert!(matches!(ret, Sundry::Comment(i) if i.into_fragment() == " sdfsfs"));
             assert_eq!(input.into_fragment(), "");
         }
+        for s in ["//", "//\n", "  //", "  //\n"] {
+            let (input, ret) = parse_inline_comment(Span::new(s)).unwrap();
+            assert_eq!(input.into_fragment(), "");
+            assert!(matches!(ret, Sundry::Comment(i) if i.fragment().is_empty()));
+        }
+        for s in ["  ", "\n", "  \n"] {
+            let (input, ret) = parse_inline_comment(Span::new(s)).unwrap();
+            assert_eq!(input.into_fragment(), "");
+            assert!(matches!(ret, Sundry::Empty(_)));
+        }
+        let (input, ret) = parse_inline_comment(Span::new("")).unwrap();
+        assert_eq!(input.into_fragment(), "");
+        assert!(matches!(ret, Sundry::EOF));
     }
 
     #[test]
@@ -164,5 +169,195 @@ mod tests {
             assert_eq!(ret.into_fragment(), "v1.0.0");
             assert_eq!(input.into_fragment(), "");
         }
+    }
+
+    #[test]
+    fn test_gomod() {
+        let s = r#"
+module example.com/my/thing
+
+go 1.12
+
+require (
+    example.com/other/thing v1.0.2
+    example.com/new/thing/v2 v2.3.4
+)
+
+exclude example.com/old/thing v1.2.3
+replace example.com/bad/thing v1.4.5 => example.com/good/thing v1.4.5
+retract [v1.9.0, v1.9.5]"#;
+        let (input, ret) = parse_gomod(Span::new(s)).unwrap();
+        assert_eq!(input.into_fragment(), "");
+        assert_eq!(
+            ret,
+            vec![
+                Context {
+                    range: (
+                        Location { line: 2, offset: 1 },
+                        Location {
+                            line: 3,
+                            offset: 29
+                        }
+                    ),
+                    comments: vec![],
+                    value: Directive::Module {
+                        module_path: "example.com/my/thing"
+                    }
+                },
+                Context {
+                    range: (
+                        Location {
+                            line: 4,
+                            offset: 30
+                        },
+                        Location {
+                            line: 5,
+                            offset: 38
+                        }
+                    ),
+                    comments: vec![],
+                    value: Directive::Go { version: "1.12" }
+                },
+                Context {
+                    range: (
+                        Location {
+                            line: 6,
+                            offset: 39
+                        },
+                        Location {
+                            line: 10,
+                            offset: 122
+                        }
+                    ),
+                    comments: vec![],
+                    value: Directive::Require {
+                        specs: vec![
+                            Context {
+                                range: (
+                                    Location {
+                                        line: 7,
+                                        offset: 53
+                                    },
+                                    Location {
+                                        line: 8,
+                                        offset: 84
+                                    }
+                                ),
+                                comments: vec![],
+                                value: ("example.com/other/thing", "v1.0.2")
+                            },
+                            Context {
+                                range: (
+                                    Location {
+                                        line: 8,
+                                        offset: 88
+                                    },
+                                    Location {
+                                        line: 9,
+                                        offset: 120
+                                    }
+                                ),
+                                comments: vec![],
+                                value: ("example.com/new/thing/v2", "v2.3.4")
+                            }
+                        ]
+                    }
+                },
+                Context {
+                    range: (
+                        Location {
+                            line: 11,
+                            offset: 123
+                        },
+                        Location {
+                            line: 12,
+                            offset: 160
+                        }
+                    ),
+                    comments: vec![],
+                    value: Directive::Exclude {
+                        specs: vec![Context {
+                            range: (
+                                Location {
+                                    line: 11,
+                                    offset: 131
+                                },
+                                Location {
+                                    line: 12,
+                                    offset: 160
+                                }
+                            ),
+                            comments: vec![],
+                            value: ("example.com/old/thing", "v1.2.3")
+                        }]
+                    }
+                },
+                Context {
+                    range: (
+                        Location {
+                            line: 12,
+                            offset: 160
+                        },
+                        Location {
+                            line: 13,
+                            offset: 230
+                        }
+                    ),
+                    comments: vec![],
+                    value: Directive::Replace {
+                        specs: vec![Context {
+                            range: (
+                                Location {
+                                    line: 12,
+                                    offset: 168
+                                },
+                                Location {
+                                    line: 13,
+                                    offset: 230
+                                }
+                            ),
+                            comments: vec![],
+                            value: ReplaceSpec {
+                                module_path: "example.com/bad/thing",
+                                version: Some("v1.4.5"),
+                                replacement: Replacement::Module((
+                                    "example.com/good/thing",
+                                    "v1.4.5"
+                                ))
+                            }
+                        }]
+                    }
+                },
+                Context {
+                    range: (
+                        Location {
+                            line: 13,
+                            offset: 230
+                        },
+                        Location {
+                            line: 13,
+                            offset: 254
+                        }
+                    ),
+                    comments: vec![],
+                    value: Directive::Retract {
+                        specs: vec![Context {
+                            range: (
+                                Location {
+                                    line: 13,
+                                    offset: 238
+                                },
+                                Location {
+                                    line: 13,
+                                    offset: 254
+                                }
+                            ),
+                            comments: vec![],
+                            value: RetractSpec::Range(("v1.9.0", "v1.9.5"))
+                        }]
+                    }
+                }
+            ]
+        );
     }
 }
