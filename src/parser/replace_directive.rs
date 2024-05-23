@@ -35,8 +35,8 @@ fn parse_replace_spec(input: Span) -> IResult<Span, Context<ReplaceSpec>> {
     let (input, (replacement, comment)) = pair(
         alt((
             separated_pair(quoted(parse_module_path), delims1, parse_identifier)
-                .map(|(p, v)| Replacement::Module((p.into_fragment(), v.into_fragment()))),
-            parse_identifier.map(|i| Replacement::FilePath(i.into_fragment())),
+                .map(|(p, v)| Replacement::Module((p.into_fragment(), v))),
+            parse_identifier.map(|i| Replacement::FilePath(i)),
         )),
         parse_inline_comment,
     )(input)?;
@@ -56,7 +56,7 @@ fn parse_replace_spec(input: Span) -> IResult<Span, Context<ReplaceSpec>> {
             comments,
             value: ReplaceSpec {
                 module_path: path.into_fragment(),
-                version: version.map(|i| i.into_fragment()),
+                version: version.map(|i| i),
                 replacement,
             },
         },
@@ -138,7 +138,7 @@ pub fn parse_replace_directive(input: Span) -> IResult<Span, Context<Directive>>
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, Directive, Location, ReplaceSpec, Replacement, Span};
+    use crate::{Context, Directive, Identifier, Location, ReplaceSpec, Replacement, Span};
 
     use super::{parse_replace_directive, parse_replace_spec};
 
@@ -160,8 +160,11 @@ mod tests {
                 comments: vec![" sfsdff"],
                 value: ReplaceSpec {
                     module_path: "golang.org/x/net",
-                    version: Some("v1.2.3"),
-                    replacement: Replacement::Module(("example.com/fork/net", "v1.4.5"))
+                    version: Some(Identifier::Raw("v1.2.3")),
+                    replacement: Replacement::Module((
+                        "example.com/fork/net",
+                        Identifier::Raw("v1.4.5")
+                    ))
                 }
             }
         );
@@ -217,10 +220,10 @@ mod tests {
                             comments: vec!["aa"],
                             value: ReplaceSpec {
                                 module_path: "golang.org/x/net",
-                                version: Some("v1.2.3"),
+                                version: Some(Identifier::Raw("v1.2.3")),
                                 replacement: Replacement::Module((
                                     "example.com/fork/net",
-                                    "v1.4.5"
+                                    Identifier::Raw("v1.4.5")
                                 ))
                             }
                         },
@@ -241,7 +244,7 @@ mod tests {
                                 version: None,
                                 replacement: Replacement::Module((
                                     "example.com/fork/net",
-                                    "v1.4.5"
+                                    Identifier::Raw("v1.4.5")
                                 ))
                             }
                         },
@@ -259,8 +262,8 @@ mod tests {
                             comments: vec!["cc"],
                             value: ReplaceSpec {
                                 module_path: "golang.org/x/net",
-                                version: Some("v1.2.3"),
-                                replacement: Replacement::FilePath("./fork/net")
+                                version: Some(Identifier::Raw("v1.2.3")),
+                                replacement: Replacement::FilePath(Identifier::Raw("./fork/net"))
                             }
                         },
                         Context {
@@ -278,7 +281,7 @@ mod tests {
                             value: ReplaceSpec {
                                 module_path: "golang.org/x/net",
                                 version: None,
-                                replacement: Replacement::FilePath("./fork/net")
+                                replacement: Replacement::FilePath(Identifier::Raw("./fork/net"))
                             }
                         },
                     ]

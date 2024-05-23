@@ -39,16 +39,14 @@ pub fn parse_toolchain_directive(input: Span) -> IResult<Span, Context<Directive
                     offset: end.location_offset(),
                 },
             ),
-            value: Directive::Toolchain {
-                name: name.fragment(),
-            },
+            value: Directive::Toolchain { name },
         },
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, Directive, Location, Span};
+    use crate::{Context, Directive, Identifier, Location, Span};
 
     use super::parse_toolchain_directive;
 
@@ -75,7 +73,7 @@ toolchain go1.21.3+auto // inline
                 ),
                 comments: vec![" heheda", " inline"],
                 value: Directive::Toolchain {
-                    name: "go1.21.3+auto"
+                    name: Identifier::Raw("go1.21.3+auto")
                 }
             }
         )

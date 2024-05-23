@@ -10,12 +10,12 @@ use nom_locate::position;
 
 use crate::{
     parser::{parse_identifier, parse_module_path},
-    Context, Directive, Location, Span, Sundry,
+    Context, Directive, Identifier, Location, Span, Sundry,
 };
 
 use super::{delims0, delims1, parse_inline_comment, parse_multiline_comments, quoted};
 
-fn parse_require_spec(input: Span) -> IResult<Span, Context<(&str, &str)>> {
+fn parse_require_spec(input: Span) -> IResult<Span, Context<(&str, Identifier)>> {
     let (input, pos) = position(input)?;
     let start = Location {
         line: pos.location_line(),
@@ -40,7 +40,7 @@ fn parse_require_spec(input: Span) -> IResult<Span, Context<(&str, &str)>> {
         Context {
             range: (start, end),
             comments,
-            value: (path.into_fragment(), version.into_fragment()),
+            value: (path.into_fragment(), version),
         },
     ))
 }
@@ -120,7 +120,7 @@ pub fn parse_require_directive(input: Span) -> IResult<Span, Context<Directive>>
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, Directive, Location, Span};
+    use crate::{Context, Directive, Identifier, Location, Span};
 
     use super::parse_require_directive;
 
@@ -170,7 +170,7 @@ mod tests {
                                 }
                             ),
                             comments: vec![" indirect"],
-                            value: ("golang.org/x/crypto", "v1.4.5")
+                            value: ("golang.org/x/crypto", Identifier::Raw("v1.4.5"))
                         },
                         Context {
                             range: (
@@ -184,7 +184,7 @@ mod tests {
                                 }
                             ),
                             comments: vec![" mm"],
-                            value: ("golang.org/x/text", "v1.6.7")
+                            value: ("golang.org/x/text", Identifier::Raw("v1.6.7"))
                         },
                     ]
                 }

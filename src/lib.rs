@@ -1,10 +1,11 @@
+use std::ops::Deref;
+
+use nom::{error::Error, Err};
 use nom_locate::LocatedSpan;
 
 mod parser;
 
-pub use parser::parse_gomod;
-
-pub type Span<'a> = LocatedSpan<&'a str>;
+type Span<'a> = LocatedSpan<&'a str>;
 
 #[derive(Debug)]
 pub enum Sundry<'a> {
@@ -14,22 +15,39 @@ pub enum Sundry<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum Identifier<'a> {
+    Raw(&'a str),
+    Interpreted(String),
+}
+
+impl Deref for Identifier<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Raw(s) => s,
+            Self::Interpreted(s) => s.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum RetractSpec<'a> {
-    Version(&'a str),
-    Range((&'a str, &'a str)),
+    Version(Identifier<'a>),
+    Range((Identifier<'a>, Identifier<'a>)),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReplaceSpec<'a> {
     pub module_path: &'a str,
-    pub version: Option<&'a str>,
+    pub version: Option<Identifier<'a>>,
     pub replacement: Replacement<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Replacement<'a> {
-    FilePath(&'a str),
-    Module((&'a str, &'a str)),
+    FilePath(Identifier<'a>),
+    Module((&'a str, Identifier<'a>)),
 }
 
 // comments on directive includes preceding-line comments and same-line comment
@@ -39,13 +57,13 @@ pub enum Directive<'a> {
         module_path: &'a str,
     },
     Go {
-        version: &'a str,
+        version: Identifier<'a>,
     },
     Require {
-        specs: Vec<Context<'a, (&'a str, &'a str)>>,
+        specs: Vec<Context<'a, (&'a str, Identifier<'a>)>>,
     },
     Toolchain {
-        name: &'a str,
+        name: Identifier<'a>,
     },
     Godebug {
         specs: Vec<Context<'a, (&'a str, &'a str)>>,
@@ -54,7 +72,7 @@ pub enum Directive<'a> {
         specs: Vec<Context<'a, ReplaceSpec<'a>>>,
     },
     Exclude {
-        specs: Vec<Context<'a, (&'a str, &'a str)>>,
+        specs: Vec<Context<'a, (&'a str, Identifier<'a>)>>,
     },
     Retract {
         specs: Vec<Context<'a, RetractSpec<'a>>>,
@@ -77,3 +95,8 @@ pub struct Context<'a, T: 'a> {
 }
 
 pub type GoMod<'a> = Vec<Context<'a, Directive<'a>>>;
+
+pub fn parse_gomod(text: &str) -> Result<GoMod, Err<Error<Span>>> {
+    let (_, ret) = parser::parse_gomod(Span::new(text))?;
+    Ok(ret)
+}

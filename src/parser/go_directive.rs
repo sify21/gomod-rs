@@ -40,16 +40,14 @@ pub fn parse_go_directive(input: Span) -> IResult<Span, Context<Directive>> {
                     offset: end.location_offset(),
                 },
             ),
-            value: Directive::Go {
-                version: ver.fragment(),
-            },
+            value: Directive::Go { version: ver },
         },
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, Directive, Location, Span};
+    use crate::{Context, Directive, Identifier, Location, Span};
 
     use super::parse_go_directive;
 
@@ -57,7 +55,7 @@ mod tests {
     fn test_go() {
         let s = r#"
 // heheda
-go `1.4.5rc1` // inline
+go "1.4.5\"rc1" // inline
 "#;
         let (input, ret) = parse_go_directive(Span::new(s)).unwrap();
         assert_eq!("", *input.fragment());
@@ -71,12 +69,12 @@ go `1.4.5rc1` // inline
                     },
                     Location {
                         line: 4,
-                        offset: 35
+                        offset: 37
                     }
                 ),
                 comments: vec![" heheda", " inline"],
                 value: Directive::Go {
-                    version: "1.4.5rc1"
+                    version: Identifier::Interpreted("1.4.5\"rc1".to_string())
                 }
             }
         )

@@ -1,9 +1,9 @@
-use crate::{Span, Sundry};
+use crate::{Identifier, Span, Sundry};
 
 use super::GoMod;
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_a, is_not, tag, take, take_while, take_while1},
+    bytes::complete::{escaped_transform, is_a, is_not, tag, take, take_while, take_while1},
     character::{
         complete::{char, one_of},
         is_alphanumeric,
@@ -70,10 +70,24 @@ fn parse_multiline_comments(input: Span) -> IResult<Span, Vec<Sundry>> {
     )(input)
 }
 
-fn parse_identifier(input: Span) -> IResult<Span, Span> {
+// https://go.dev/ref/mod#go-mod-file-lexical
+//
+// Identifiers are sequences of non-whitespace characters, such as module paths or semantic versions.
+//
+// Strings are quoted sequences of characters. There are two kinds of strings: interpreted strings
+// beginning and ending with quotation marks (", U+0022) and raw strings beginning and ending with
+// grave accents (`, U+0060). Interpreted strings may contain escape sequences consisting of a backslash
+// (\, U+005C) followed by another character. An escaped quotation mark (\") does not terminate an
+// interpreted string. The unquoted value of an interpreted string is the sequence of characters between
+// quotation marks with each escape sequence replaced by the character following the backslash (for
+// example, \" is replaced by ", \n is replaced by n). In contrast, the unquoted value of a raw string is
+// simply the sequence of characters between grave accents; backslashes have no special meaning within raw strings.
+//
+// Identifiers and strings are interchangeable in the go.mod grammar.
+fn parse_identifier(input: Span) -> IResult<Span, Identifier> {
     alt((
-        parse_raw_string,
-        parse_interpreted_string,
+        parse_raw_string.map(|i| Identifier::Raw(i.into_fragment())),
+        parse_interpreted_string.map(|i| Identifier::Interpreted(i)),
         verify(
             recognize(many_till(
                 take(1usize),
@@ -85,13 +99,14 @@ fn parse_identifier(input: Span) -> IResult<Span, Span> {
                 ))),
             )),
             |i: &Span| !i.is_empty(),
-        ),
+        )
+        .map(|i: Span| Identifier::Raw(i.into_fragment())),
     ))(input)
 }
-fn parse_interpreted_string(input: Span) -> IResult<Span, Span> {
+fn parse_interpreted_string(input: Span) -> IResult<Span, String> {
     delimited(
         char('"'),
-        escaped(is_not("\n\r\t\u{08}\u{0c}\"\\"), '\\', one_of(r#"nrtbf"\"#)),
+        escaped_transform(is_not("\n\r\t\u{08}\u{0c}\"\\"), '\\', take(1u8)),
         char('"'),
     )(input)
 }
@@ -134,11 +149,11 @@ pub fn parse_gomod(input: Span) -> IResult<Span, GoMod> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        parse_gomod, Context, Directive, Location, ReplaceSpec, Replacement, RetractSpec, Span,
+        Context, Directive, Identifier, Location, ReplaceSpec, Replacement, RetractSpec, Span,
         Sundry,
     };
 
-    use super::{parse_identifier, parse_inline_comment};
+    use super::{parse_gomod, parse_identifier, parse_inline_comment};
 
     #[test]
     fn test_inline_comment() {
@@ -166,9 +181,12 @@ mod tests {
     fn test_identifier() {
         for s in [r#"`v1.0.0`"#, "v1.0.0", r#""v1.0.0""#] {
             let (input, ret) = parse_identifier(Span::new(s)).unwrap();
-            assert_eq!(ret.into_fragment(), "v1.0.0");
+            assert_eq!(&ret as &str, "v1.0.0");
             assert_eq!(input.into_fragment(), "");
         }
+        let (input, ret) = parse_identifier(Span::new(r#""abc\n\r\f\"dd""#)).unwrap();
+        assert_eq!(&ret as &str, "abcnrf\"dd");
+        assert_eq!(input.into_fragment(), "");
     }
 
     #[test]
@@ -216,7 +234,9 @@ retract [v1.9.0, v1.9.5]"#;
                         }
                     ),
                     comments: vec![],
-                    value: Directive::Go { version: "1.12" }
+                    value: Directive::Go {
+                        version: Identifier::Raw("1.12")
+                    }
                 },
                 Context {
                     range: (
@@ -244,7 +264,7 @@ retract [v1.9.0, v1.9.5]"#;
                                     }
                                 ),
                                 comments: vec![],
-                                value: ("example.com/other/thing", "v1.0.2")
+                                value: ("example.com/other/thing", Identifier::Raw("v1.0.2"))
                             },
                             Context {
                                 range: (
@@ -258,7 +278,7 @@ retract [v1.9.0, v1.9.5]"#;
                                     }
                                 ),
                                 comments: vec![],
-                                value: ("example.com/new/thing/v2", "v2.3.4")
+                                value: ("example.com/new/thing/v2", Identifier::Raw("v2.3.4"))
                             }
                         ]
                     }
@@ -288,7 +308,7 @@ retract [v1.9.0, v1.9.5]"#;
                                 }
                             ),
                             comments: vec![],
-                            value: ("example.com/old/thing", "v1.2.3")
+                            value: ("example.com/old/thing", Identifier::Raw("v1.2.3"))
                         }]
                     }
                 },
@@ -319,10 +339,10 @@ retract [v1.9.0, v1.9.5]"#;
                             comments: vec![],
                             value: ReplaceSpec {
                                 module_path: "example.com/bad/thing",
-                                version: Some("v1.4.5"),
+                                version: Some(Identifier::Raw("v1.4.5")),
                                 replacement: Replacement::Module((
                                     "example.com/good/thing",
-                                    "v1.4.5"
+                                    Identifier::Raw("v1.4.5")
                                 ))
                             }
                         }]
@@ -353,7 +373,10 @@ retract [v1.9.0, v1.9.5]"#;
                                 }
                             ),
                             comments: vec![],
-                            value: RetractSpec::Range(("v1.9.0", "v1.9.5"))
+                            value: RetractSpec::Range((
+                                Identifier::Raw("v1.9.0"),
+                                Identifier::Raw("v1.9.5")
+                            ))
                         }]
                     }
                 }

@@ -30,8 +30,8 @@ fn parse_retract_spec(input: Span) -> IResult<Span, Context<RetractSpec>> {
                 ),
                 pair(delims0, char(']')),
             )
-            .map(|(v1, v2)| RetractSpec::Range((v1.into_fragment(), v2.into_fragment()))),
-            parse_identifier.map(|i| RetractSpec::Version(i.into_fragment())),
+            .map(|(v1, v2)| RetractSpec::Range((v1, v2))),
+            parse_identifier.map(|i| RetractSpec::Version(i)),
         )),
         parse_inline_comment,
     )(input)?;
@@ -129,7 +129,7 @@ pub fn parse_retract_directive(input: Span) -> IResult<Span, Context<Directive>>
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, Directive, Location, RetractSpec, Span};
+    use crate::{Context, Directive, Identifier, Location, RetractSpec, Span};
 
     use super::parse_retract_directive;
 
@@ -179,7 +179,7 @@ mod tests {
                                 }
                             ),
                             comments: vec![" aaa"],
-                            value: RetractSpec::Version("v1.0.0")
+                            value: RetractSpec::Version(Identifier::Raw("v1.0.0"))
                         },
                         Context {
                             range: (
@@ -193,7 +193,10 @@ mod tests {
                                 }
                             ),
                             comments: vec![" bbb", " ccc"],
-                            value: RetractSpec::Range(("v1.0.0", "v1.9.9"))
+                            value: RetractSpec::Range((
+                                Identifier::Raw("v1.0.0"),
+                                Identifier::Raw("v1.9.9")
+                            ))
                         },
                     ]
                 }
