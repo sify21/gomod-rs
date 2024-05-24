@@ -1,4 +1,8 @@
 # gomod-rs
+
+[![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![crates.io Version](https://img.shields.io/crates/v/gomod-rs)](https://crates.io/crates/gomod-rs)
+
 A [go.mod](https://go.dev/ref/mod#go-mod-file) file parser with location information.
 
 Implemented using [nom](https://github.com/rust-bakery/nom) and [nom\_locate](https://github.com/fflorent/nom_locate).
